@@ -1,0 +1,132 @@
+---
+title: "Exercise Activity Prediction"
+author: "Sizhan Shi"
+date: "December 21, 2014"
+output: html_document
+---
+## Background
+
+The is a course project submission for Practical Machine Learning course offered via Coursera. The goal of the project is to predict whether the participants did barbell lifts correctly, based on data inputs from accelerometers on belts, forearms, arms, and dumbells of 6 participants.  
+
+## Method 
+
+1. Load the data  
+2. Examine the data  
+3. Use Validation Set Cross-validation Approach
+4. Create model
+5. Apply model to the test data set  
+
+#### Load the data  
+
+```{r, cache=TRUE}
+## change directory
+##setwd("./pml-wk4")
+##library(caret)
+train.url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(train.url, destfile="pml-training.csv", method="curl")
+test.url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(test.url, destfile="pml-testing.csv", method="curl")
+training <- read.csv("pml-training.csv")
+testing <- read.csv("pml-testing.csv")
+```
+
+#### Examine the data
+
+```{r, cache=TRUE, fig.height=4, fig.width=6}
+dim(testing)
+##ead(testing)
+## there are many columns with no data or NA data, examine the testing dataset to see if any columns should be ignored
+complete.cases(testing)
+## there is no row with complete data, meaning we should only design features based on the data provided by the testing set
+
+na.list <- c()
+
+checkNA <- function(x) {
+    if(sum(is.na(testing[,x])) == 20) {
+        na.list <<- c(na.list, x)
+    }
+    else return
+}
+
+invisible(sapply(colnames(testing), checkNA))
+
+## now na.list contains all the features we should not be using since testing data set has no data for them
+
+head(na.list)
+length(na.list)
+## There are 100 columns we do not need to consider when designing the model. 
+## create a training dataset with only the data we can use
+train.clean <- training[, !colnames(training) %in% na.list]
+
+## examine the distribution of some data
+hist(subset(train.clean, classe=A)$magnet_forearm_y, main="Histogram of magnet_forearm_y for Classe A")
+hist(subset(train.clean, classe=A)$magnet_belt_y, main="Histogram of magnet_belt_y for Classe A")
+## clearly, they don't follow normal distribution, meaning we should not use LDA or QDA models at least  
+```
+
+ 
+
+#### Use Validation Set Cross-validation Approach   
+
+```{r, cache=TRUE}
+
+set.seed(123)
+
+## combine training and testing dataset, and then seprate, to make sure both have same values of factors
+
+training$problem_id <- NA
+testing$classe <- NA
+
+## randomnize data
+training <- training[sample(nrow(training)),]
+
+## create a validation data set
+inTrain <- createDataPartition(y=training$classe, p=0.6, list=FALSE)
+in.training <- training[inTrain,]
+in.testing <- training[-inTrain,]
+
+## remove unnecessary  columns
+fit.rf <- train(y=in.training$classe, 
+                x=in.training[, !colnames(in.training) %in% c("classe", "problem_id","cvtd_timestamp","X", na.list)],
+                method="rf")
+
+predict.in <- predict(fit.rf, newdata=in.testing[, !colnames(in.testing) 
+                                                 %in% c("classe", "problem_id","cvtd_timestamp", "X", na.list)])
+                      
+## evaluate model performance on the validation set
+confusionMatrix(predict.in, in.testing$classe)
+
+```
+
+From the confusion matrix, we can conclude that overall accuracy from the validation set is about 0.999; hence the accuracy on the actual test set should be lower than 0.999.  
+
+#### Apply data to the final test data set
+
+```{r, cache=TRUE}
+testing.final <- testing[, !colnames(testing) %in% na.list]
+testing.final <- testing.final[, !colnames(testing.final) %in% c("classe", "problem_id","cvtd_timestamp", "X")]
+levels(testing.final[,4]) <- c("no", "yes")
+predict.final <- predict(fit.rf, newdata=testing.final)
+predict.final
+```
+
+The prediction result has accuracy of 100%.  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
